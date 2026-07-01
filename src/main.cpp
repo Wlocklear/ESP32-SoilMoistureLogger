@@ -27,7 +27,7 @@
  *    Logger states:
  *      IDLE       → waiting for the user to start a recording
  *      BURN_OFF   → sensor inserted; 30-minute stabilisation countdown
- *      RECORDING  → reading soil moisture every READ_INTERVAL_SEC seconds
+ *      RECORDING  → reading soil moisture every READ_INTERVAL_SEC seconds (10 min)
  *
  *    Web UI sections (top → bottom):
  *      1. Instant Reading  — on-demand single reading with %, raw ADC
@@ -65,7 +65,7 @@
 //  TIMING
 // ============================================================
 #define BURN_OFF_SEC          600   // 10-minute stabilisation after sensor insertion
-#define READ_INTERVAL_SEC     300   // 5-minute interval between logged readings
+#define READ_INTERVAL_SEC     600   // 10-minute interval between logged readings
 #define WIFI_RETRY_INTERVAL  30000UL
 
 // ============================================================
