@@ -178,6 +178,7 @@ void   startMDNS();
 void   setupRoutes();
 int    readMoistureRaw();
 int    readMoistureMedian();
+int    readMoistureStable();
 int    moistureToPercent(int raw);
 bool   moistureRawPlausible(int raw);
 String sanitizeMDNS(const String &s);
@@ -494,6 +495,25 @@ int readMoistureRaw() {
     int result = (int)roundf(ema);
     Serial.printf("[Soil] Raw ADC: %d (median %d)\n", result, median);
     return result;
+}
+
+// Calibration needs a single trustworthy point, not a smoothed stream.
+// WiFi radio activity injects noise bursts into ADC1 readings, so one
+// 192ms sample burst can land entirely inside a burst and read way off.
+// Take 5 independent medians spread over ~1s (spanning multiple WiFi
+// radio cycles) and return their median to reject that.
+int readMoistureStable() {
+    int samples[5];
+    for (int i = 0; i < 5; i++) {
+        samples[i] = readMoistureMedian();
+        if (i < 4) delay(200);
+    }
+    for (int i = 1; i < 5; i++) {
+        int v = samples[i], j = i - 1;
+        while (j >= 0 && samples[j] > v) { samples[j + 1] = samples[j--]; }
+        samples[j + 1] = v;
+    }
+    return samples[2];
 }
 
 int moistureToPercent(int raw) {
@@ -872,13 +892,13 @@ void handleChartRename() {
 
 void handleCalDry() {
     if (!checkCsrf()) return;
-    dryCal = readMoistureMedian(); dryCalSet = true; saveCalibration();
+    dryCal = readMoistureStable(); dryCalSet = true; saveCalibration();
     server.send(200, "application/json", "{\"ok\":true,\"dry\":" + String(dryCal) + "}");
 }
 
 void handleCalWet() {
     if (!checkCsrf()) return;
-    wetCal = readMoistureMedian(); wetCalSet = true; saveCalibration();
+    wetCal = readMoistureStable(); wetCalSet = true; saveCalibration();
     server.send(200, "application/json", "{\"ok\":true,\"wet\":" + String(wetCal) + "}");
 }
 
