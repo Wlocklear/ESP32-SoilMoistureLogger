@@ -72,8 +72,8 @@
 //  CALIBRATION DEFAULTS
 // ============================================================
 #define DEFAULT_DEVICE_NAME  "SoilLogger"
-#define DEFAULT_DRY_CAL      3200
-#define DEFAULT_WET_CAL      1400
+#define DEFAULT_DRY_CAL      1489
+#define DEFAULT_WET_CAL      935
 
 // ============================================================
 //  LOGGER STORAGE
@@ -177,6 +177,7 @@ void   startAPPortal();
 void   startMDNS();
 void   setupRoutes();
 int    readMoistureRaw();
+int    readMoistureMedian();
 int    moistureToPercent(int raw);
 bool   moistureRawPlausible(int raw);
 String sanitizeMDNS(const String &s);
@@ -468,7 +469,7 @@ bool connectWiFi() {
 // ============================================================
 //  SENSORS
 // ============================================================
-int readMoistureRaw() {
+int readMoistureMedian() {
     // 64 samples, sort, average middle 50% to reject outliers
     int buf[64];
     for (int i = 0; i < 64; i++) { buf[i] = analogRead(MOISTURE_PIN); delay(3); }
@@ -479,7 +480,11 @@ int readMoistureRaw() {
     }
     long sum = 0;
     for (int i = 16; i < 48; i++) sum += buf[i];
-    int median = (int)(sum / 32);
+    return (int)(sum / 32);
+}
+
+int readMoistureRaw() {
+    int median = readMoistureMedian();
 
     // EMA across successive calls to smooth inter-reading noise
     static float ema = -1.0f;
@@ -867,13 +872,13 @@ void handleChartRename() {
 
 void handleCalDry() {
     if (!checkCsrf()) return;
-    dryCal = readMoistureRaw(); dryCalSet = true; saveCalibration();
+    dryCal = readMoistureMedian(); dryCalSet = true; saveCalibration();
     server.send(200, "application/json", "{\"ok\":true,\"dry\":" + String(dryCal) + "}");
 }
 
 void handleCalWet() {
     if (!checkCsrf()) return;
-    wetCal = readMoistureRaw(); wetCalSet = true; saveCalibration();
+    wetCal = readMoistureMedian(); wetCalSet = true; saveCalibration();
     server.send(200, "application/json", "{\"ok\":true,\"wet\":" + String(wetCal) + "}");
 }
 
