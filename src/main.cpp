@@ -176,7 +176,6 @@ bool   connectWiFi();
 void   startAPPortal();
 void   startMDNS();
 void   setupRoutes();
-int    readMoistureRaw();
 int    readMoistureMedian();
 int    readMoistureStable();
 int    moistureToPercent(int raw);
@@ -484,24 +483,11 @@ int readMoistureMedian() {
     return (int)(sum / 32);
 }
 
-int readMoistureRaw() {
-    int median = readMoistureMedian();
-
-    // EMA across successive calls to smooth inter-reading noise
-    static float ema = -1.0f;
-    if (ema < 0.0f) ema = (float)median;
-    else            ema = 0.25f * (float)median + 0.75f * ema;
-
-    int result = (int)roundf(ema);
-    Serial.printf("[Soil] Raw ADC: %d (median %d)\n", result, median);
-    return result;
-}
-
-// Calibration needs a single trustworthy point, not a smoothed stream.
-// WiFi radio activity injects noise bursts into ADC1 readings, so one
-// 192ms sample burst can land entirely inside a burst and read way off.
-// Take 5 independent medians spread over ~1s (spanning multiple WiFi
-// radio cycles) and return their median to reject that.
+// A single 192ms sample burst is too short to average out multi-second
+// drift/noise on this sensor (WiFi radio activity and other electrical
+// noise on ADC1). None of the call sites (boot, instant-reading button,
+// 10-minute log interval) are latency-sensitive, so every real reading
+// takes 5 independent medians spread over ~1s and returns their median.
 int readMoistureStable() {
     int samples[5];
     for (int i = 0; i < 5; i++) {
@@ -513,6 +499,7 @@ int readMoistureStable() {
         while (j >= 0 && samples[j] > v) { samples[j + 1] = samples[j--]; }
         samples[j + 1] = v;
     }
+    Serial.printf("[Soil] Stable raw ADC: %d\n", samples[2]);
     return samples[2];
 }
 
@@ -533,7 +520,7 @@ bool isCalibrated() { return dryCalSet && wetCalSet && (dryCal != wetCal); }
 //  LOGGER
 // ============================================================
 void takeLogReading() {
-    moistureRaw = readMoistureRaw();
+    moistureRaw = readMoistureStable();
     moisturePct = moistureRawPlausible(moistureRaw) ? moistureToPercent(moistureRaw) : 0;
     lastSensorTime = getTimeString();
     sensorReady = true;
@@ -656,7 +643,7 @@ void handleHealth() { server.send(200, "text/plain", "OK"); }
 
 void handleInstantReading() {
     if (!checkCsrf()) return;
-    moistureRaw = readMoistureRaw();
+    moistureRaw = readMoistureStable();
     moisturePct = moistureRawPlausible(moistureRaw) ? moistureToPercent(moistureRaw) : 0;
     sensorReady    = true;
     lastSensorTime = getTimeString();
@@ -1852,7 +1839,7 @@ void setup() {
     Serial.println("[HTTP] Server started");
 
     // ── Take an initial reading ───────────────────────────
-    moistureRaw = readMoistureRaw();
+    moistureRaw = readMoistureStable();
     moisturePct = moistureRawPlausible(moistureRaw) ? moistureToPercent(moistureRaw) : 0;
     sensorReady    = true;
     lastSensorTime = getTimeString();
