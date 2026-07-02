@@ -483,24 +483,39 @@ int readMoistureMedian() {
     return (int)(sum / 32);
 }
 
-// A single 192ms sample burst is too short to average out multi-second
-// drift/noise on this sensor (WiFi radio activity and other electrical
-// noise on ADC1). None of the call sites (boot, instant-reading button,
-// 10-minute log interval) are latency-sensitive, so every real reading
-// takes 5 independent medians spread over ~1s and returns their median.
+// This sensor drifts by 50+ raw counts over ~10s (WiFi radio current
+// transients sagging its supply, per its TLC555-oscillator design).
+// A 1-2s sample window is too short to average that out — it just
+// picks up wherever the drift happens to be at that moment. None of
+// the call sites (boot, instant-reading button, 10-minute log
+// interval, calibration) are latency-sensitive, so every real reading
+// spans ~10s of independent medians and returns a trimmed mean,
+// discarding the extremes and averaging what's left.
+#define STABLE_SAMPLE_COUNT  8
+#define STABLE_SAMPLE_GAP_MS 300
+#define STABLE_TRIM_EACH_END 1
+
 int readMoistureStable() {
-    int samples[5];
-    for (int i = 0; i < 5; i++) {
+    int samples[STABLE_SAMPLE_COUNT];
+    for (int i = 0; i < STABLE_SAMPLE_COUNT; i++) {
         samples[i] = readMoistureMedian();
-        if (i < 4) delay(200);
+        if (i < STABLE_SAMPLE_COUNT - 1) delay(STABLE_SAMPLE_GAP_MS);
     }
-    for (int i = 1; i < 5; i++) {
+    for (int i = 1; i < STABLE_SAMPLE_COUNT; i++) {
         int v = samples[i], j = i - 1;
         while (j >= 0 && samples[j] > v) { samples[j + 1] = samples[j--]; }
         samples[j + 1] = v;
     }
-    Serial.printf("[Soil] Stable raw ADC: %d\n", samples[2]);
-    return samples[2];
+    long sum = 0;
+    int kept = 0;
+    for (int i = STABLE_TRIM_EACH_END; i < STABLE_SAMPLE_COUNT - STABLE_TRIM_EACH_END; i++) {
+        sum += samples[i];
+        kept++;
+    }
+    int result = (int)(sum / kept);
+    Serial.printf("[Soil] Stable raw ADC: %d (min %d, max %d)\n",
+                  result, samples[0], samples[STABLE_SAMPLE_COUNT - 1]);
+    return result;
 }
 
 int moistureToPercent(int raw) {
@@ -1697,14 +1712,6 @@ function update(){
 pollTimer=setInterval(update,pollInterval);
 update();
 setTimeout(function(){loadChartData(activeTab);},800);
-
-// ── Live ADC feed for calibration section ────────────────
-setInterval(function(){
-  api('/sensor/instant')
-    .then(function(r){return r.json();})
-    .then(function(d){$('calRaw').textContent=d.raw;})
-    .catch(function(){});
-},2000);
 </script>
 </body>
 </html>
