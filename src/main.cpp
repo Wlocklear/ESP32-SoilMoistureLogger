@@ -1832,8 +1832,12 @@ void setup() {
     // ── NTP ───────────────────────────────────────────────
     setupTime();
 
-    // ── Modem sleep (keep WiFi responsive, save power) ────
-    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    // ── WiFi power save OFF ────────────────────────────────
+    // This logger is mains-powered with no battery/sleep feature, so
+    // modem sleep buys nothing — it only causes the WiFi radio to cycle
+    // on and off, which injects periodic noise bursts into ADC1 (shared
+    // with the soil sensor pin) and destabilizes moisture readings.
+    esp_wifi_set_ps(WIFI_PS_NONE);
 
     // ── mDNS ──────────────────────────────────────────────
     startMDNS();
