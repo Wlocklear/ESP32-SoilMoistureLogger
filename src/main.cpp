@@ -44,9 +44,15 @@
 #define FIRMWARE_VERSION  "v1.1"
 
 // ============================================================
-//  PIN DEFINITIONS
+//  PIN DEFINITIONS  (board-selected at build time)
+//    ESP32-S3 is the default / universal target (needs PSRAM for
+//    session storage). -DXIAO_C6 selects the XIAO ESP32-C6 pin.
 // ============================================================
-#define MOISTURE_PIN     10   // GPIO 10, ADC1 channel
+#ifdef XIAO_C6
+  #define MOISTURE_PIN   0    // A0 — ADC1 (Seeed XIAO ESP32-C6)
+#else
+  #define MOISTURE_PIN   10   // GPIO 10, ADC1 (ESP32-S3, default)
+#endif
 #define MOISTURE_SAMPLES 16   // ADC readings averaged per sample
 
 // ============================================================
@@ -71,7 +77,7 @@
 // ============================================================
 //  CALIBRATION DEFAULTS
 // ============================================================
-#define DEFAULT_DEVICE_NAME  "SoilLogger"
+#define DEFAULT_DEVICE_NAME  "SoilMoistureLogger"
 #define DEFAULT_DRY_CAL      1489
 #define DEFAULT_WET_CAL      935
 
